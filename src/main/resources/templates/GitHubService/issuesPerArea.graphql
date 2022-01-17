@@ -1,0 +1,7 @@
+{
+{#for tuple in areaLabelTuples}
+  {tuple.x}_created:search(query: "repo:{repository} label:{kindLabel} label:\"{tuple.y}\" is:issue created:{timeWindow}", type: ISSUE, first: 1) {
+    issueCount
+  }
+{/for}
+}

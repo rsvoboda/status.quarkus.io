@@ -12,7 +12,6 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.json.JsonArray;
 import javax.json.JsonObject;
-import javax.json.JsonString;
 import javax.json.JsonValue;
 import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
@@ -21,6 +20,7 @@ import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.status.model.Label;
 import io.quarkus.status.model.StatsEntry;
+import io.quarkus.status.model.StringTuple;
 import io.smallrye.graphql.client.GraphQLClient;
 import io.smallrye.graphql.client.GraphQLError;
 import io.smallrye.graphql.client.Response;
@@ -90,13 +90,35 @@ public class GitHubService {
         return statsEntry;
     }
 
+    public List<StatsEntry> issuesPerArea(String repository, String kindLabel, List<StringTuple> areaLabelTuples, String timeWindow) throws Exception {
+        String query = Templates.issuesPerArea(repository, kindLabel, areaLabelTuples, timeWindow).render();
+        System.out.println("Labels count: " + areaLabelTuples.size());
+        System.out.println(query);
+
+
+        Response response = graphQLClient.executeSync(query);
+        handleErrors(response);
+
+        List<StatsEntry> entries = new ArrayList<>();
+        JsonObject data = response.getData();
+        System.out.println(data);
+
+        for (StringTuple keyTuple : areaLabelTuples) {
+            StatsEntry statsEntry = new StatsEntry();
+            statsEntry.entryName = keyTuple.y;
+            statsEntry.created = data.getJsonObject(keyTuple.x + "_created").getInt("issueCount");
+            entries.add(statsEntry);
+        }
+        return entries;
+    }
+
     public List<Label> labelsStats(String owner, String repository, String mainLabel, boolean subsetOnly) throws Exception {
         List<Label> labels = new ArrayList<>();
         labels.add(new Label("Label", "Open", "Closed"));
 
         String cursor = null;
         if (subsetOnly) {
-            extractLabels(owner, repository, mainLabel, 10, cursor, labels);
+            extractLabels(owner, repository, mainLabel, 20, cursor, labels);
         } else {
             do {
                 cursor = extractLabels(owner, repository, mainLabel, 100, cursor, labels);
@@ -108,6 +130,7 @@ public class GitHubService {
 
     private String extractLabels(String owner, String repository, String mainLabel, int returnedElements, String cursor, List<Label> labels) throws Exception {
         String query = Templates.labelsStats(owner, repository, mainLabel, returnedElements, cursor).render();
+        System.out.println("extractLabels Query: " + query);
         Response response = graphQLClient.executeSync(query);
         handleErrors(response);
 
@@ -186,10 +209,16 @@ public class GitHubService {
     private void handleErrors(Response response) throws IOException {
         List<GraphQLError> errors = response.getErrors();
         if (errors != null) {
+            System.out.println("Response: " + response);
             // Checking if there are any errors different from NOT_FOUND
             for (int k = 0; k < errors.size(); k++) {
                 GraphQLError error = errors.get(k);
-                Object errorType = error.getOtherFields().getOrDefault("type", null);
+                System.out.println("Error: " + error);
+                System.out.println("error.getOtherFields(): " + error.getOtherFields());
+                Object errorType = null;
+                if (error.getOtherFields() != null) {
+                    errorType = error.getOtherFields().getOrDefault("type", null);
+                }
                 if (errorType == null || !"NOT_FOUND".equals(errorType)) {
                     throw new IOException(error.toString());
                 }
@@ -218,6 +247,11 @@ public class GitHubService {
          * Returns the issue stats for given repository, label and time window
          */
         public static native TemplateInstance issuesStats(String repository, String label, String timeWindow);
+
+        /**
+         * Returns the issue stats for given repository, kind label, area labels and time window
+         */
+        public static native TemplateInstance issuesPerArea(String repository, String kindLabel, List<StringTuple> areaLabelTuples, String timeWindow);
 
         /**
          * Returns the labels stats for given repository and main label

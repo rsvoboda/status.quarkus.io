@@ -1,0 +1,174 @@
+
+{#include StatusResource/base}
+	{#title}{statsPerArea.name} Deep Dive per Area{/title}
+	{#styles}
+		<link rel="stylesheet" href="https://cdn.datatables.net/1.10.22/css/dataTables.semanticui.min.css">
+	{/styles}
+	{#body}
+		<div class="ui main container">
+			<div class="ui pointing menu">
+				<a class="{isBugs ? 'active' : ''} item" href="/bugs/per-area/">Bugs</a>
+				<a class="{isBugs ? '' : 'active'} item" href="/enhancements/per-area/">Enhancements</a>
+			</div>
+
+			<div class="ui icon message">
+				<i class="small sync icon"></i>
+				<div class="content">
+					<p>Updated {inject:prettyTime.format(statsPerArea.updated)} (refreshed every 6 hours).</p>
+				</div>
+			</div>
+
+			<div class="ui message">
+				<canvas id="canvas-lines"></canvas>
+			</div>
+
+			<label><input id="select-all-checkbox" type="checkbox" onclick="updateAll(this)"/>All</label>
+
+			<br/><hr>
+
+			{#for item in statsPerArea.perAreaMap.keySet}
+				<label><input class="data-checkbox" type="checkbox" onclick="updateChart(this)" value="{item_count}"/>TBD-{item}</label>
+			{/for}
+
+		</div>
+	{/body}
+	{#scripts}
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+		<script type="text/javascript" src="https://cdn.datatables.net/1.10.22/js/jquery.dataTables.min.js"></script>
+		<script type="text/javascript" src="https://cdn.datatables.net/1.10.22/js/dataTables.semanticui.min.js"></script>
+		<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery-csv/1.0.11/jquery.csv.min.js"></script>
+		<script type="text/javascript" src="/js/csv_to_html_table.js"></script>
+		<script>
+			var lineChartConfig = {
+				type: 'line',
+				data: {
+					labels: [
+					{#for label in statsPerArea.chartLabels}"{label}",{/for}
+					],
+					datasets: [
+					{#for entry in statsPerArea.perAreaMap.entrySet}
+					{
+						label: '{entry.key} - {statsPerArea.colorsMap.get(entry.key)}', fill: false, hidden: true, tension: 0.4, backgroundColor: "{entry.value.color}", borderColor: "{entry.value.color}",
+						data: [
+							{#for statsEntry in entry.value.statsEntries}"{statsEntry.created}",{/for}
+						]
+					},
+					{/for}
+					]
+				},
+				options: {
+					responsive: true,
+					plugins: {
+						legend: {
+							display: false,
+							onClick: function (event, legendItem, legend) {
+								defaultLegendClickHandler(event, legendItem, legend);
+
+								var index = legendItem.datasetIndex;
+								let checkboxes = document.querySelectorAll('.data-checkbox');
+								checkboxes[index].checked = !checkboxes[index].checked;
+							},
+							onHover: function(event, legendItem, legend) {
+								event.native.target.style.cursor = 'pointer';
+							},
+							onLeave: function(event, legendItem, legend) {
+								event.native.target.style.cursor = 'default';
+							},
+						},
+						title: {
+							display: true,
+							text: 'Activity per month'
+						},
+						tooltip: {
+							mode: 'index',
+							intersect: false,
+						},
+					},
+					hover: {
+						mode: 'nearest',
+						intersect: true
+					},
+					scales: {
+						y: {
+							title: {
+								display: true,
+								text: 'Number of Bugs'
+							}
+						}
+					},
+
+				}
+			};
+
+			window.onload = function() {
+				var ctxLines = document.getElementById('canvas-lines').getContext('2d');
+				window.lineChart = new Chart(ctxLines, lineChartConfig);
+				updateCheckboxesNames();
+				showFiveDatasets();
+
+			};
+
+			var defaultLegendClickHandler = Chart.defaults.plugins.legend.onClick;
+
+			function updateAll(selectAll){
+				let checkboxes = document.querySelectorAll('.data-checkbox');
+				if (selectAll.checked == false) {
+					for (let i = 0; i < checkboxes.length; i++) {
+						checkboxes[i].checked = false;
+						window.lineChart.hide(i)
+					}
+				} else {
+					for (let i = 0; i < checkboxes.length; i++) {
+						checkboxes[i].checked = true;
+						window.lineChart.show(i)
+					}
+				}
+			}
+
+			function checkboxSelectAllChecker() {
+				const selectallcheckbox = document.getElementById('select-all-checkbox')
+				let checkboxes = document.querySelectorAll('.data-checkbox');
+				let x = 0;
+				for (let i = 0; i < checkboxes.length; i++) {
+					if (checkboxes[i].checked == true){
+						x++;
+					}
+				}
+				if (x == checkboxes.length) {
+					selectallcheckbox.checked = true;
+				} else {
+					selectallcheckbox.checked = false;
+				}
+			}
+
+			function updateCheckboxesNames() {
+				let checkboxes = document.querySelectorAll('.data-checkbox');
+				for (let i = 0; i < checkboxes.length; i++) {
+					// console.log(checkboxes[i]);
+					// console.log(checkboxes[i].parentNode);
+					checkboxes[i].parentNode.innerHTML=checkboxes[i].outerHTML + lineChartConfig.data.datasets[i].label;
+				}
+			}
+
+			function showFiveDatasets() {
+				let checkboxes = document.querySelectorAll('.data-checkbox');
+				for (let i = 0; i < 5; i++) {
+					window.lineChart.show(i)
+					checkboxes[i].checked = true;
+				}
+			}
+
+			function updateChart(dataset){
+				const isDataShown = window.lineChart.isDatasetVisible(dataset.value)
+				// console.log(lineChartConfig.data.datasets[dataset.value].label);
+				if (isDataShown == false) {
+					window.lineChart.show(dataset.value)
+				}
+				if (isDataShown == true) {
+					window.lineChart.hide(dataset.value)
+				}
+				checkboxSelectAllChecker();
+			}
+		</script>
+	{/scripts}
+{/include}
